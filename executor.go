@@ -11,6 +11,7 @@ import (
 
 type Table interface {
 	TableName() string
+	DBType() string
 }
 
 type executor struct {
