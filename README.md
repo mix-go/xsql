@@ -1,4 +1,4 @@
-> OpenMix 出品：[https://openmix.org](https://openmix.org/mix-go)(测试同步)
+> 基于OpenMix的https://openmix.org/mix-go开发
 
 ## Mix XSQL
 
@@ -9,7 +9,7 @@ A lightweight database based on database/sql
 ## 安装
 
 ```
-go get github.com/mix-go/xsql
+go get github.com/yupeng2015/xsql
 ```
 
 ## 初始化
