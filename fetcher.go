@@ -7,6 +7,7 @@ import (
 	ora "github.com/sijms/go-ora/v2"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -79,6 +80,23 @@ func (t *Fetcher) Find(i interface{}) error {
 			if tag == "-" || tag == "_" {
 				continue
 			}
+
+			strs := strings.Split(tag, ",")
+			//是否空值忽略该字段
+			//var omitempy bool
+			//if len(strs) > 1{
+			//	for _, s := range strs[1:] {
+			//		if strings.Contains(s,"omitempty"){
+			//			omitempy = true
+			//		}
+			//	}
+			//}
+			//if !omitempy{
+			//	fields = append(fields, strs[0])
+			//}else {
+			//	continue
+			//}
+			tag = strs[0]
 			if !rows[r].Exist(tag) {
 				continue
 			}
@@ -360,6 +378,7 @@ func mapped(field reflect.Value, row Row, tag string, opts *Options) (err error)
 		if !res.Empty() &&
 			field.Type().String() == "time.Time" &&
 			reflect.ValueOf(v).Type().String() != "time.Time" {
+			fmt.Println(res.String())
 			if t, e := time.ParseInLocation(timeLayout, res.String(), time.Local); e == nil {
 				v = t
 			} else {
