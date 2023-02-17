@@ -65,6 +65,8 @@ func (t *executor) Insert(data interface{}, opts *Options) (sql.Result, error) {
 			if !value.Field(i).CanInterface() {
 				continue
 			}
+			fieldTypeStr := value.Field(i).Type().String()
+
 			isTime := value.Field(i).Type().String() == "time.Time"
 
 			tag := value.Type().Field(i).Tag.Get("xsql")
@@ -81,30 +83,39 @@ func (t *executor) Insert(data interface{}, opts *Options) (sql.Result, error) {
 					}
 				}
 			}
-			if !omitempy {
-				fields = append(fields, strs[0])
-			} else {
+
+			valueFieldVal := ""
+			if fieldTypeStr == "string" {
+				valueFieldVal = fmt.Sprintf("%s", value.Field(i).Interface())
+			} else if fieldTypeStr == "int" || fieldTypeStr == "int64" || fieldTypeStr == "int32" {
+				valueFieldVal = fmt.Sprintf("%d", value.Field(i).Interface())
+			}
+
+			//fmt.Println(value.Field(i).Type().String(),value.Field(i).Interface(),valueFieldVal)
+			if omitempy && (valueFieldVal == "" || valueFieldVal == "0") {
 				continue
+			} else {
+				fields = append(fields, strs[0])
+				v := ""
+				if placeholder == "?" {
+					v = placeholder
+				} else {
+					v = fmt.Sprintf(placeholder, i)
+				}
+				if isTime {
+					vars = append(vars, timeFunc(v))
+				} else {
+					vars = append(vars, v)
+				}
+
+				if isTime {
+					ti := value.Field(i).Interface().(time.Time)
+					bindArgs = append(bindArgs, ti.Format(timeLayout))
+				} else {
+					bindArgs = append(bindArgs, value.Field(i).Interface())
+				}
 			}
 
-			v := ""
-			if placeholder == "?" {
-				v = placeholder
-			} else {
-				v = fmt.Sprintf(placeholder, i)
-			}
-			if isTime {
-				vars = append(vars, timeFunc(v))
-			} else {
-				vars = append(vars, v)
-			}
-
-			if isTime {
-				ti := value.Field(i).Interface().(time.Time)
-				bindArgs = append(bindArgs, ti.Format(timeLayout))
-			} else {
-				bindArgs = append(bindArgs, value.Field(i).Interface())
-			}
 		}
 		break
 	default:
@@ -309,6 +320,7 @@ func (t *executor) Update(data interface{}, expr string, args []interface{}, opt
 		}
 
 		for i := 0; i < value.NumField(); i++ {
+			fieldTypeStr := value.Field(i).Type().String()
 			if !value.Field(i).CanInterface() {
 				continue
 			}
@@ -318,19 +330,43 @@ func (t *executor) Update(data interface{}, expr string, args []interface{}, opt
 				continue
 			}
 
-			if placeholder == "?" {
-				set = append(set, fmt.Sprintf("%s = %s", columnQuotes+tag+columnQuotes, placeholder))
-			} else {
-				set = append(set, fmt.Sprintf("%s = %s", columnQuotes+tag+columnQuotes, fmt.Sprintf(placeholder, i)))
+			strs := strings.Split(tag, ",")
+			//是否空值忽略该字段
+			var omitempy bool
+			if len(strs) > 1 {
+				for _, s := range strs[1:] {
+					if strings.Contains(s, "omitempty") {
+						omitempy = true
+					}
+				}
 			}
 
-			// time特殊处理
-			if value.Field(i).Type().String() == "time.Time" {
-				ti := value.Field(i).Interface().(time.Time)
-				bindArgs = append(bindArgs, ti.Format(timeLayout))
-			} else {
-				bindArgs = append(bindArgs, value.Field(i).Interface())
+			valueFieldVal := ""
+			if fieldTypeStr == "string" {
+				valueFieldVal = fmt.Sprintf("%s", value.Field(i).Interface())
+			} else if fieldTypeStr == "int" || fieldTypeStr == "int64" || fieldTypeStr == "int32" {
+				valueFieldVal = fmt.Sprintf("%d", value.Field(i).Interface())
 			}
+
+			//fmt.Println(value.Field(i).Type().String(),value.Field(i).Interface(),valueFieldVal)
+			if omitempy && (valueFieldVal == "" || valueFieldVal == "0") {
+				continue
+			} else {
+				tag = strs[0]
+				if placeholder == "?" {
+					set = append(set, fmt.Sprintf("%s = %s", columnQuotes+tag+columnQuotes, placeholder))
+				} else {
+					set = append(set, fmt.Sprintf("%s = %s", columnQuotes+tag+columnQuotes, fmt.Sprintf(placeholder, i)))
+				}
+				// time特殊处理
+				if value.Field(i).Type().String() == "time.Time" {
+					ti := value.Field(i).Interface().(time.Time)
+					bindArgs = append(bindArgs, ti.Format(timeLayout))
+				} else {
+					bindArgs = append(bindArgs, value.Field(i).Interface())
+				}
+			}
+
 		}
 		break
 	default:

@@ -39,6 +39,8 @@ func (t *Fetcher) First(i interface{}) error {
 			continue
 		}
 		tag := root.Type().Field(n).Tag.Get("xsql")
+		strs := strings.Split(tag, ",")
+		tag = strs[0]
 		if tag == "-" || tag == "_" {
 			continue
 		}
