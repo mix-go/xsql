@@ -2,6 +2,8 @@ package xsql
 
 import (
 	"database/sql"
+	"errors"
+	"fmt"
 )
 
 var DefaultTimeLayout = "2006-01-02 15:04:05"
@@ -11,6 +13,20 @@ var DefaultTimeLayout = "2006-01-02 15:04:05"
 // oracle: return fmt.Sprintf("TO_TIMESTAMP(%s, 'SYYYY-MM-DD HH24:MI:SS:FF6')", placeholder)
 var DefaultTimeFunc = func(placeholder string) string {
 	return placeholder
+}
+
+type QueryRes struct {
+	InsertId int64
+	Affected int64
+	sql.Result
+}
+
+func (this QueryRes) LastInsertId() (int64, error) {
+	return this.InsertId, nil
+}
+
+func (this QueryRes) RowsAffected() (int64, error) {
+	return this.Affected, nil
 }
 
 type TimeFunc func(placeholder string) string
@@ -46,6 +62,26 @@ func (t *DB) Insert(data interface{}, opts ...Options) (sql.Result, error) {
 		t.Options.InsertKey = o.InsertKey
 	}
 	return t.executor.Insert(data, &t.Options)
+}
+
+// 返回最后插入的ID
+func (t *DB) InsertTakeLastId(data interface{}, withSeq string, opts ...Options) (sql.Result, error) {
+	for _, o := range opts {
+		t.Options.InsertKey = o.InsertKey
+	}
+	_, err := t.executor.InsertTakeLastId(data, withSeq, &t.Options)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := t.GetLastId(data, withSeq)
+	if err != nil {
+		return nil, err
+	}
+	qr := QueryRes{
+		InsertId: rows[0].Get("INSERT_ID").Int(),
+		Affected: 1,
+	}
+	return qr, nil
 }
 
 func (t *DB) BatchInsert(data interface{}, opts ...Options) (sql.Result, error) {
@@ -114,4 +150,14 @@ func (t *DB) First(i interface{}, query string, args ...interface{}) error {
 		return err
 	}
 	return nil
+}
+
+func (t *DB) GetLastId(data any, seq string) ([]Row, error) {
+	table, _ := data.(Table)
+	switch table.DBType() {
+	case "Oracle":
+		sqlStr := fmt.Sprintf(`SELECT %s.CURRVAL INSERT_ID FROM DUAL`, seq)
+		return t.Query(sqlStr)
+	}
+	return nil, errors.New("未查到序列自增值")
 }

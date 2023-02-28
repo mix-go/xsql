@@ -380,7 +380,7 @@ func mapped(field reflect.Value, row Row, tag string, opts *Options) (err error)
 		if !res.Empty() &&
 			field.Type().String() == "time.Time" &&
 			reflect.ValueOf(v).Type().String() != "time.Time" {
-			fmt.Println(res.String())
+			//fmt.Println(res.String())
 			if t, e := time.ParseInLocation(timeLayout, res.String(), time.Local); e == nil {
 				v = t
 			} else {

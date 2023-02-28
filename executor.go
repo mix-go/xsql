@@ -147,6 +147,145 @@ func (t *executor) Insert(data interface{}, opts *Options) (sql.Result, error) {
 	return res, nil
 }
 
+func (t *executor) InsertTakeLastId(data interface{}, withSeq string, opts *Options) (sql.Result, error) {
+	insertKey := "INSERT INTO"
+	if opts.InsertKey != "" {
+		insertKey = opts.InsertKey
+	}
+	placeholder := "?"
+	if opts.Placeholder != "" {
+		placeholder = opts.Placeholder
+	}
+	timeLayout := DefaultTimeLayout
+	if opts.TimeLayout != "" {
+		timeLayout = opts.TimeLayout
+	}
+	timeFunc := DefaultTimeFunc
+	if opts.TimeFunc != nil {
+		timeFunc = opts.TimeFunc
+	}
+	columnQuotes := "`"
+	if opts.ColumnQuotes != "" {
+		columnQuotes = opts.ColumnQuotes
+	}
+	var debugFunc DebugFunc
+	if opts.DebugFunc != nil {
+		debugFunc = opts.DebugFunc
+	}
+
+	fields := make([]string, 0)
+	vars := make([]string, 0)
+	bindArgs := make([]interface{}, 0)
+
+	table := ""
+
+	value := reflect.ValueOf(data)
+	switch value.Kind() {
+	case reflect.Ptr:
+		return t.Insert(value.Elem().Interface(), opts)
+	case reflect.Struct:
+
+		if tab, ok := data.(Table); ok {
+			table = tab.TableName()
+		} else {
+			table = value.Type().Name()
+		}
+
+		for i := 0; i < value.NumField(); i++ {
+			if !value.Field(i).CanInterface() {
+				continue
+			}
+			fieldTypeStr := value.Field(i).Type().String()
+
+			isTime := value.Field(i).Type().String() == "time.Time"
+
+			tag := value.Type().Field(i).Tag.Get("xsql")
+			if tag == "" || tag == "-" || tag == "_" {
+				continue
+			}
+			strs := strings.Split(tag, ",")
+			//是否空值忽略该字段
+			var omitempy bool
+			if len(strs) > 1 {
+				for _, s := range strs[1:] {
+					if strings.Contains(s, "omitempty") {
+						omitempy = true
+					}
+				}
+			}
+
+			valueFieldVal := ""
+			if fieldTypeStr == "string" {
+				valueFieldVal = fmt.Sprintf("%s", value.Field(i).Interface())
+			} else if fieldTypeStr == "int" || fieldTypeStr == "int64" || fieldTypeStr == "int32" {
+				valueFieldVal = fmt.Sprintf("%d", value.Field(i).Interface())
+			}
+
+			//fmt.Println(value.Field(i).Type().String(),value.Field(i).Interface(),valueFieldVal)
+			if omitempy && (valueFieldVal == "" || valueFieldVal == "0") {
+				continue
+			} else {
+				fields = append(fields, strs[0])
+				v := ""
+				if placeholder == "?" {
+					v = placeholder
+				} else {
+					v = fmt.Sprintf(placeholder, i)
+				}
+				if isTime {
+					vars = append(vars, timeFunc(v))
+				} else {
+					vars = append(vars, v)
+				}
+
+				if isTime {
+					ti := value.Field(i).Interface().(time.Time)
+					bindArgs = append(bindArgs, ti.Format(timeLayout))
+				} else {
+					bindArgs = append(bindArgs, value.Field(i).Interface())
+				}
+			}
+
+		}
+		break
+	default:
+		return nil, errors.New("sql: only for struct type")
+	}
+
+	SQL := fmt.Sprintf(`%s %s (%s) VALUES (%s)`, insertKey, table, columnQuotes+strings.Join(fields, columnQuotes+", "+columnQuotes)+columnQuotes, strings.Join(vars, `, `))
+	//switch dbType {
+	//case "Oracle":
+	//	if withSeq != ""{
+	//		SQL += ";SELECT "+withSeq+".CURRVAL from  FROM DUAL"
+	//	}else{
+	//		SQL += "; SELECT "+table+"_ID_SEQ.CURRVAL FROM DUAL"
+	//	}
+	//	break
+	//}
+
+	startTime := time.Now()
+	res, err := t.Executor.Exec(SQL, bindArgs...)
+	var rowsAffected int64
+	if res != nil {
+		rowsAffected, _ = res.RowsAffected()
+	}
+	l := &Log{
+		Time:         time.Now().Sub(startTime),
+		SQL:          SQL,
+		Bindings:     bindArgs,
+		RowsAffected: rowsAffected,
+		Error:        err,
+	}
+	if debugFunc != nil {
+		debugFunc(l)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
 func (t *executor) BatchInsert(array interface{}, opts *Options) (sql.Result, error) {
 	insertKey := "INSERT INTO"
 	if opts.InsertKey != "" {
