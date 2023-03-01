@@ -56,7 +56,9 @@ func New(db *sql.DB, opts ...Options) *DB {
 		},
 	}
 }
-
+func (t *DB) GetRawDB() *sql.DB {
+	return t.raw
+}
 func (t *DB) Insert(data interface{}, opts ...Options) (sql.Result, error) {
 	for _, o := range opts {
 		t.Options.InsertKey = o.InsertKey
