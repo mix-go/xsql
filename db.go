@@ -97,6 +97,11 @@ func (t *DB) Update(data interface{}, expr string, args ...interface{}) (sql.Res
 	return t.executor.Update(data, expr, args, &t.Options)
 }
 
+// 强制更新值为空的字段
+func (t *DB) UpdateForce(data interface{}, expr string, fields ...string) (sql.Result, error) {
+	return t.executor.UpdateForce(data, expr, fields, &t.Options)
+}
+
 func (t *DB) Exec(query string, args ...interface{}) (sql.Result, error) {
 	return t.executor.Exec(query, args, &t.Options)
 }
@@ -160,6 +165,10 @@ func (t *DB) GetLastId(data any, seq string) ([]Row, error) {
 	case "Oracle":
 		sqlStr := fmt.Sprintf(`SELECT %s.CURRVAL INSERT_ID FROM DUAL`, seq)
 		return t.Query(sqlStr)
+	case "Mssql":
+		sqlStr := fmt.Sprintf(`Select SCOPE_IDENTITY() INSERT_ID`)
+		return t.Query(sqlStr)
+
 	}
 	return nil, errors.New("未查到序列自增值")
 }
