@@ -71,17 +71,22 @@ func (t *DB) InsertTakeLastId(data interface{}, withSeq string, opts ...Options)
 	for _, o := range opts {
 		t.Options.InsertKey = o.InsertKey
 	}
-	_, err := t.executor.InsertTakeLastId(data, withSeq, &t.Options)
+
+	qr, err := t.executor.InsertTakeLastId(data, withSeq, t.query, &t.Options)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := t.GetLastId(data, withSeq)
-	if err != nil {
-		return nil, err
-	}
-	qr := QueryRes{
-		InsertId: rows[0].Get("INSERT_ID").Int(),
-		Affected: 1,
+	table, _ := data.(Table)
+	if table.DBType() == "Oracle" {
+		rows, err := t.GetLastId(data, withSeq)
+		if err != nil {
+			return nil, err
+		}
+		qr = QueryRes{
+			InsertId: rows[0].Get("INSERT_ID").Int(),
+			Affected: 1,
+		}
+		return qr, nil
 	}
 	return qr, nil
 }

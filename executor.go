@@ -150,7 +150,7 @@ func (t *executor) Insert(data interface{}, opts *Options) (sql.Result, error) {
 	return res, nil
 }
 
-func (t *executor) InsertTakeLastId(data interface{}, withSeq string, opts *Options) (sql.Result, error) {
+func (t *executor) InsertTakeLastId(data interface{}, withSeq string, query query, opts *Options) (sql.Result, error) {
 	insertKey := "INSERT INTO"
 	if opts.InsertKey != "" {
 		insertKey = opts.InsertKey
@@ -259,22 +259,33 @@ func (t *executor) InsertTakeLastId(data interface{}, withSeq string, opts *Opti
 	}
 
 	SQL := fmt.Sprintf(`%s %s (%s) VALUES (%s)`, insertKey, table, columnQuotes+strings.Join(fields, columnQuotes+", "+columnQuotes)+columnQuotes, strings.Join(vars, `, `))
-	//switch dbType {
-	//case "Oracle":
-	//	if withSeq != ""{
-	//		SQL += ";SELECT "+withSeq+".CURRVAL from  FROM DUAL"
-	//	}else{
-	//		SQL += "; SELECT "+table+"_ID_SEQ.CURRVAL FROM DUAL"
-	//	}
-	//	break
-	//}
-
 	startTime := time.Now()
-	res, err := t.Executor.Exec(SQL, bindArgs...)
-	var rowsAffected int64
-	if res != nil {
-		rowsAffected, _ = res.RowsAffected()
+	var res QueryRes
+	var err error
+	dataTable, _ := data.(Table)
+	switch dataTable.DBType() {
+	case "Mssql":
+		SQL += ";Select SCOPE_IDENTITY() INSERT_ID"
+		f, err := query.Fetch(SQL, bindArgs, opts)
+		if err != nil {
+			return nil, err
+		}
+		rs, err := f.Rows()
+		if err != nil {
+			return nil, err
+		}
+		res = QueryRes{
+			InsertId: rs[0].Get("INSERT_ID").Int(),
+			Affected: 1,
+		}
+		break
 	}
+
+	//res, err := t.Executor.Exec(SQL, bindArgs...)
+	var rowsAffected int64
+	//if res != nil {
+	//	rowsAffected, _ = res.RowsAffected()
+	//}
 	l := &Log{
 		Time:         time.Now().Sub(startTime),
 		SQL:          SQL,
