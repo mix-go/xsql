@@ -102,7 +102,23 @@ func (t *DB) Update(data interface{}, expr string, args ...interface{}) (sql.Res
 	return t.executor.Update(data, expr, args, &t.Options)
 }
 
-// 强制更新值为空的字段
+func (t *DB) Save(data interface{}, orInsert bool) (sql.Result, error) {
+	_, ok := data.(TableAttribute)
+	if !ok {
+		return nil, errors.New("structure does not implement an interface TableAttribute")
+	}
+	return t.executor.Save(data, orInsert, &t.Options)
+}
+
+/*
+@Description: 强制更新值为空的字段
+@receiver t
+@param data
+@param expr 更新的where条件
+@param fields  强制要更新的字段名称
+@return sql.Result
+@return error
+*/
 func (t *DB) UpdateForce(data interface{}, expr string, fields ...string) (sql.Result, error) {
 	return t.executor.UpdateForce(data, expr, fields, &t.Options)
 }

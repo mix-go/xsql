@@ -13,6 +13,10 @@ type Table interface {
 	TableName() string
 	DBType() string
 }
+type TableAttribute interface {
+	Table
+	PrimaryName() string //获取主键
+}
 
 type executor struct {
 	Executor
@@ -668,6 +672,137 @@ func (t *executor) Update(data interface{}, expr string, args []interface{}, opt
 		where = fmt.Sprintf(` WHERE %s`, expr)
 		bindArgs = append(bindArgs, args...)
 	}
+
+	SQL := fmt.Sprintf(`UPDATE %s SET %s%s`, table, strings.Join(set, ", "), where)
+
+	startTime := time.Now()
+	res, err := t.Executor.Exec(SQL, bindArgs...)
+	var rowsAffected int64
+	if res != nil {
+		rowsAffected, _ = res.RowsAffected()
+	}
+	l := &Log{
+		Time:         time.Now().Sub(startTime),
+		SQL:          SQL,
+		Bindings:     bindArgs,
+		RowsAffected: rowsAffected,
+		Error:        err,
+	}
+	if debugFunc != nil {
+		debugFunc(l)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
+func (t *executor) Save(data interface{}, orInsert bool, opts *Options) (sql.Result, error) {
+	tt, ok := data.(TableAttribute)
+	if !ok {
+		return nil, errors.New("should implement an interface TableAttribute")
+	}
+	placeholder := "?"
+	if opts.Placeholder != "" {
+		placeholder = opts.Placeholder
+	}
+	timeLayout := DefaultTimeLayout
+	if opts.TimeLayout != "" {
+		timeLayout = opts.TimeLayout
+	}
+	columnQuotes := "`"
+	if opts.ColumnQuotes != "" {
+		columnQuotes = opts.ColumnQuotes
+	}
+	var debugFunc DebugFunc
+	if opts.DebugFunc != nil {
+		debugFunc = opts.DebugFunc
+	}
+
+	set := make([]string, 0)
+	bindArgs := make([]interface{}, 0)
+
+	table := ""
+
+	typeVal := reflect.TypeOf(data)
+	value := reflect.ValueOf(data)
+	//主键值 主键只能是int
+	var primaryVal any
+	switch value.Kind() {
+	case reflect.Ptr:
+		return t.Save(value.Elem().Interface(), orInsert, opts)
+	case reflect.Struct:
+		if tab, ok := data.(Table); ok {
+			table = tab.TableName()
+		} else {
+			table = value.Type().Name()
+		}
+		paramNum := 0 //真正需要更新得字段数量
+
+		for i := 0; i < value.NumField(); i++ {
+			//类型
+			//fieldTypeStr := value.Field(i).Type().String()
+			//属性名称
+			fieldName := typeVal.Field(i).Name
+
+			if !value.Field(i).CanInterface() {
+				continue
+			}
+
+			tag := value.Type().Field(i).Tag.Get("xsql")
+			if tag == "" || tag == "-" || tag == "_" {
+				continue
+			}
+
+			strs := strings.Split(tag, ",")
+			//是否空值忽略该字段
+			//var omitempy bool
+			//if len(strs) > 1 {
+			//	for _, s := range strs[1:] {
+			//		if strings.Contains(s, "omitempty") {
+			//			omitempy = true
+			//		}
+			//	}
+			//}
+
+			if fieldName == tt.PrimaryName() {
+				primaryVal = value.Field(i).Interface()
+				if primaryVal == 0 {
+					if !orInsert {
+						return nil, errors.New("primary value zero!")
+					}
+					//如果没有数据则新增
+					return t.Insert(data, opts)
+				}
+				continue
+			}
+
+			paramNum++
+			tag = strs[0]
+
+			if placeholder == "?" {
+				set = append(set, fmt.Sprintf("%s = %s", columnQuotes+tag+columnQuotes, placeholder))
+			} else if placeholder == "@" {
+				set = append(set, fmt.Sprintf("%s = @p%d", columnQuotes+tag+columnQuotes, paramNum))
+			} else {
+				set = append(set, fmt.Sprintf("%s = %s", columnQuotes+tag+columnQuotes, fmt.Sprintf(placeholder, i)))
+			}
+			// time特殊处理
+			if value.Field(i).Type().String() == "time.Time" {
+				ti := value.Field(i).Interface().(time.Time)
+				bindArgs = append(bindArgs, ti.Format(timeLayout))
+			} else {
+				bindArgs = append(bindArgs, value.Field(i).Interface())
+			}
+
+		}
+		break
+	default:
+		return nil, errors.New("sql: only for struct type")
+	}
+
+	where := fmt.Sprintf(` WHERE %s = %d`, tt.PrimaryName(), primaryVal)
 
 	SQL := fmt.Sprintf(`UPDATE %s SET %s%s`, table, strings.Join(set, ", "), where)
 
