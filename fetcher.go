@@ -73,42 +73,54 @@ func (t *Fetcher) Find(i interface{}) error {
 		if newItem.Kind() == reflect.Ptr {
 			newItem = newItem.Elem()
 		}
-		for n := 0; n < newItem.NumField(); n++ {
-			field := newItem.Field(n)
-			if !field.CanSet() {
-				continue
-			}
-			tag := newItem.Type().Field(n).Tag.Get("xsql")
-			if tag == "-" || tag == "_" {
-				continue
-			}
-
-			strs := strings.Split(tag, ",")
-			//是否空值忽略该字段
-			//var omitempy bool
-			//if len(strs) > 1{
-			//	for _, s := range strs[1:] {
-			//		if strings.Contains(s,"omitempty"){
-			//			omitempy = true
-			//		}
-			//	}
-			//}
-			//if !omitempy{
-			//	fields = append(fields, strs[0])
-			//}else {
-			//	continue
-			//}
-			tag = strs[0]
-			if !rows[r].Exist(tag) {
-				continue
-			}
-			if err = mapped(field, rows[r], tag, t.Options); err != nil {
-				return err
-			}
+		err = t.ParseStruct(newItem, rows, r)
+		if err != nil {
+			return err
 		}
 		root.Set(reflect.Append(root, newItem))
 	}
 
+	return nil
+}
+
+func (t *Fetcher) ParseStruct(newItem reflect.Value, rows []Row, r int) error {
+	for n := 0; n < newItem.NumField(); n++ {
+		field := newItem.Field(n)
+		fieldType := field.Kind()
+		if fieldType == reflect.Struct { //判断如果是结构体
+			t.ParseStruct(field, rows, r)
+		}
+		if !field.CanSet() {
+			continue
+		}
+		tag := newItem.Type().Field(n).Tag.Get("xsql")
+		if tag == "-" || tag == "_" {
+			continue
+		}
+
+		strs := strings.Split(tag, ",")
+		//是否空值忽略该字段
+		//var omitempy bool
+		//if len(strs) > 1{
+		//	for _, s := range strs[1:] {
+		//		if strings.Contains(s,"omitempty"){
+		//			omitempy = true
+		//		}
+		//	}
+		//}
+		//if !omitempy{
+		//	fields = append(fields, strs[0])
+		//}else {
+		//	continue
+		//}
+		tag = strs[0]
+		if !rows[r].Exist(tag) {
+			continue
+		}
+		if err := mapped(field, rows[r], tag, t.Options); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
