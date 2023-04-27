@@ -31,27 +31,7 @@ func (t *Fetcher) First(i interface{}) error {
 	if len(rows) == 0 {
 		return sql.ErrNoRows
 	}
-	row := rows[0]
-
-	for n := 0; n < root.NumField(); n++ {
-		field := root.Field(n)
-		if !field.CanSet() {
-			continue
-		}
-		tag := root.Type().Field(n).Tag.Get("xsql")
-		strs := strings.Split(tag, ",")
-		tag = strs[0]
-		if tag == "-" || tag == "_" {
-			continue
-		}
-		if !row.Exist(tag) {
-			continue
-		}
-		if err = mapped(field, row, tag, t.Options); err != nil {
-			return err
-		}
-	}
-
+	t.ParseStruct(root, rows, 0)
 	return nil
 }
 
@@ -83,6 +63,14 @@ func (t *Fetcher) Find(i interface{}) error {
 	return nil
 }
 
+/*
+@Description: 解析结构体映射数据 支持递归
+@receiver t
+@param newItem
+@param rows
+@param r
+@return error
+*/
 func (t *Fetcher) ParseStruct(newItem reflect.Value, rows []Row, r int) error {
 	for n := 0; n < newItem.NumField(); n++ {
 		field := newItem.Field(n)
