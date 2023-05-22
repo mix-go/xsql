@@ -271,6 +271,12 @@ func (t *executor) InsertTakeLastId(data interface{}, withSeq string, query quer
 	case "Mssql":
 		SQL += ";Select SCOPE_IDENTITY() INSERT_ID"
 		f, err := query.Fetch(SQL, bindArgs, opts)
+		//执行insert可能会出现异常，通过该方式获取
+		for f.R.Next() {
+			if err := f.R.Err(); err != nil {
+				return nil, err
+			}
+		}
 		if err != nil {
 			return nil, err
 		}
