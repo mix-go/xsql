@@ -51,6 +51,7 @@ func (t *executor) Insert(data interface{}, opts *Options) (sql.Result, error) {
 	fields := make([]string, 0)
 	vars := make([]string, 0)
 	bindArgs := make([]interface{}, 0)
+	var bindArgsPrint string //打印sql插入值得字符串
 
 	table := ""
 
@@ -93,6 +94,8 @@ func (t *executor) Insert(data interface{}, opts *Options) (sql.Result, error) {
 				valueFieldVal = fmt.Sprintf("%s", value.Field(i).Interface())
 			} else if fieldTypeStr == "int" || fieldTypeStr == "int64" || fieldTypeStr == "int32" {
 				valueFieldVal = fmt.Sprintf("%d", value.Field(i).Interface())
+			} else {
+				valueFieldVal = "OTHER_DATA"
 			}
 
 			//fmt.Println(value.Field(i).Type().String(),value.Field(i).Interface(),valueFieldVal)
@@ -117,9 +120,28 @@ func (t *executor) Insert(data interface{}, opts *Options) (sql.Result, error) {
 
 				if isTime {
 					ti := value.Field(i).Interface().(time.Time)
-					bindArgs = append(bindArgs, ti.Format(timeLayout))
+					insertRealVal := ti.Format(timeLayout)
+					bindArgsPrint += fmt.Sprintf("%s, ", insertRealVal)
+					bindArgs = append(bindArgs, insertRealVal)
 				} else {
-					bindArgs = append(bindArgs, value.Field(i).Interface())
+					insertRealVal := value.Field(i).Interface()
+					if fieldTypeStr == "string" {
+						bindArgsPrint += fmt.Sprintf("'%v', ", insertRealVal)
+					} else if fieldTypeStr == "[]uint8" {
+						blobInsertRealVal := insertRealVal.([]uint8)
+						if len(blobInsertRealVal) > 0 {
+							bindArgsPrint += fmt.Sprintf("'%v', ", string(blobInsertRealVal))
+						} else {
+							bindArgsPrint += "'', "
+							if dataTable, _ := data.(Table); dataTable.DBType() == "Oracle" {
+								insertRealVal = any("")
+							}
+						}
+					} else {
+						bindArgsPrint += fmt.Sprintf("%v, ", insertRealVal)
+					}
+
+					bindArgs = append(bindArgs, insertRealVal)
 				}
 			}
 
@@ -130,7 +152,8 @@ func (t *executor) Insert(data interface{}, opts *Options) (sql.Result, error) {
 	}
 
 	SQL := fmt.Sprintf(`%s %s (%s) VALUES (%s)`, insertKey, table, columnQuotes+strings.Join(fields, columnQuotes+", "+columnQuotes)+columnQuotes, strings.Join(vars, `, `))
-
+	bindArgsPrint = strings.TrimSuffix(bindArgsPrint, ", ")
+	SQLPrint := fmt.Sprintf(`%s %s (%s) VALUES (%s)`, insertKey, table, columnQuotes+strings.Join(fields, columnQuotes+", "+columnQuotes)+columnQuotes, bindArgsPrint)
 	startTime := time.Now()
 	res, err := t.Executor.Exec(SQL, bindArgs...)
 	var rowsAffected int64
@@ -140,6 +163,7 @@ func (t *executor) Insert(data interface{}, opts *Options) (sql.Result, error) {
 	l := &Log{
 		Time:         time.Now().Sub(startTime),
 		SQL:          SQL,
+		SQLPrint:     SQLPrint,
 		Bindings:     bindArgs,
 		RowsAffected: rowsAffected,
 		Error:        err,
@@ -266,6 +290,7 @@ func (t *executor) InsertTakeLastId(data interface{}, withSeq string, query quer
 	startTime := time.Now()
 	var res QueryRes
 	var err error
+	var rowsAffected int64
 	dataTable, _ := data.(Table)
 	switch dataTable.DBType() {
 	case "Mssql":
@@ -292,13 +317,18 @@ func (t *executor) InsertTakeLastId(data interface{}, withSeq string, query quer
 			Affected: 1,
 		}
 		break
+	case "Oracle":
+		_, err = t.Executor.Exec(SQL, bindArgs...)
+		if err != nil {
+			return res, err
+		}
+		res = QueryRes{
+			InsertId: 0,
+			Affected: 1,
+		}
+		break
 	}
 
-	//res, err := t.Executor.Exec(SQL, bindArgs...)
-	var rowsAffected int64
-	//if res != nil {
-	//	rowsAffected, _ = res.RowsAffected()
-	//}
 	l := &Log{
 		Time:         time.Now().Sub(startTime),
 		SQL:          SQL,
