@@ -294,7 +294,7 @@ func (t *executor) InsertTakeLastId(data interface{}, withSeq string, query quer
 	dataTable, _ := data.(Table)
 	switch dataTable.DBType() {
 	case "Mssql":
-		SQL += ";Select SCOPE_IDENTITY() INSERT_ID"
+		SQL += ";Select ISNULL(SCOPE_IDENTITY(),0) INSERT_ID"
 		f, err := query.Fetch(SQL, bindArgs, opts)
 		if err != nil {
 			return nil, err
