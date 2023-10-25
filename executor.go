@@ -764,7 +764,7 @@ func (t *executor) Save(data interface{}, orInsert bool, opts *Options) (sql.Res
 
 	table := ""
 
-	typeVal := reflect.TypeOf(data)
+	//typeVal := reflect.TypeOf(data)
 	value := reflect.ValueOf(data)
 	//主键值 主键只能是int
 	var primaryVal any
@@ -783,7 +783,7 @@ func (t *executor) Save(data interface{}, orInsert bool, opts *Options) (sql.Res
 			//类型
 			//fieldTypeStr := value.Field(i).Type().String()
 			//属性名称
-			fieldName := typeVal.Field(i).Name
+			//fieldName := typeVal.Field(i).Name
 
 			if !value.Field(i).CanInterface() {
 				continue
@@ -804,8 +804,8 @@ func (t *executor) Save(data interface{}, orInsert bool, opts *Options) (sql.Res
 			//		}
 			//	}
 			//}
-
-			if fieldName == tt.PrimaryName() {
+			tag = strs[0]
+			if tag == tt.PrimaryName() {
 				primaryVal = value.Field(i).Interface()
 				if primaryVal == 0 {
 					if !orInsert {
@@ -818,7 +818,6 @@ func (t *executor) Save(data interface{}, orInsert bool, opts *Options) (sql.Res
 			}
 
 			paramNum++
-			tag = strs[0]
 
 			if placeholder == "?" {
 				set = append(set, fmt.Sprintf("%s = %s", columnQuotes+tag+columnQuotes, placeholder))
