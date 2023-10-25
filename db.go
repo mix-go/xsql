@@ -193,3 +193,6 @@ func (t *DB) GetLastId(data any, seq string) ([]Row, error) {
 	}
 	return nil, errors.New("未查到序列自增值")
 }
+func (t *DB) NewCondition(dataType string) Condition {
+	return NewCondition(dataType)
+}
