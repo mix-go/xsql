@@ -55,7 +55,9 @@ func (t *executor) Insert(data interface{}, opts *Options) (sql.Result, error) {
 
 	table := ""
 
-	value := reflect.ValueOf(data)
+	value := SqlNull{
+		reflect.ValueOf(data),
+	}
 	switch value.Kind() {
 	case reflect.Ptr:
 		return t.Insert(value.Elem().Interface(), opts)
@@ -70,7 +72,8 @@ func (t *executor) Insert(data interface{}, opts *Options) (sql.Result, error) {
 			if !value.Field(i).CanInterface() {
 				continue
 			}
-			fieldTypeStr := value.Field(i).Type().String()
+			fieldTypeStr := value.FieldTypeBasic(i)
+			//fieldTypeStr := value.Field(i).Type().String()
 
 			isTime := value.Field(i).Type().String() == "time.Time"
 
@@ -90,10 +93,11 @@ func (t *executor) Insert(data interface{}, opts *Options) (sql.Result, error) {
 			}
 
 			valueFieldVal := ""
+			valBasic := value.FieldAnyBasic(i)
 			if fieldTypeStr == "string" {
-				valueFieldVal = fmt.Sprintf("%s", value.Field(i).Interface())
+				valueFieldVal = fmt.Sprintf("%s", valBasic)
 			} else if fieldTypeStr == "int" || fieldTypeStr == "int64" || fieldTypeStr == "int32" {
-				valueFieldVal = fmt.Sprintf("%d", value.Field(i).Interface())
+				valueFieldVal = fmt.Sprintf("%d", valBasic)
 			} else {
 				valueFieldVal = "OTHER_DATA"
 			}
